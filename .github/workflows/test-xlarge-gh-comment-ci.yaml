@@ -1,0 +1,95 @@
+name: test-xlarge-gh-comment-ci
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/test-xlarge-gh-comment-ci.yaml"
+
+env:
+  # 65536 is the maximum length of a GitHub comment
+  COMMENT_LENGTH: 140000
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    name: Comment on PR
+    steps:
+    - name: Generate Random String with Special Characters
+      run: |
+        head -c ${COMMENT_LENGTH} <(tr -dc '[:graph:][:space:]' < /dev/urandom) > comment.txt
+      shell: bash
+    - name: Upload file as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: comment
+        path: comment.txt
+    - name: Display the Random String
+      run: cat comment.txt
+    - name: Terraform Comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const MAX_GITHUB_COMMENT_LENGTH = 65536;
+          let plan;
+
+          function splitIntoChunks(str, chunkSize) {
+            if (typeof str !== "string") {
+              throw new Error("Input must be a string");
+            }
+            if (typeof chunkSize !== "number" || chunkSize <= 0) {
+              throw new Error("Chunk size must be a positive number");
+            }
+
+            const codePoints = Array.from(str);
+
+            const chunks = [];
+            for (let i = 0; i < codePoints.length; i += chunkSize) {
+              chunks.push(codePoints.slice(i, i + chunkSize).join(""));
+            }
+
+            return chunks;
+          }
+
+          try {
+            const fs = require('fs');
+            plan = fs.readFileSync("comment.txt", { encoding: 'utf8', flag: 'r' });
+          } catch (err) {
+            console.log(err);
+            return;
+          }
+
+          if (plan.length > MAX_GITHUB_COMMENT_LENGTH) {
+            const chunks = splitIntoChunks(plan, MAX_GITHUB_COMMENT_LENGTH);
+            const totalChunksCount = chunks.length;
+
+            for (const [index, chunk] of chunks.entries()) {
+              const body = `
+          <b>Extra long comment (part ${index+1}/${totalChunksCount})</b>
+          \`\`\`hcl
+          ${chunk}
+          \`\`\`
+          `;
+
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              })
+            }
+
+          } else {
+            const body = `
+          <b>A regular comment (less than 65536 characters long)</b>
+          \`\`\`hcl
+          ${plan}
+          \`\`\`
+          `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })
+          }
