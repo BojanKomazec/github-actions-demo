@@ -33,7 +33,7 @@ jobs:
         path: comment.txt
     - name: Display the Random String
       run: cat comment.txt
-    - name: Terraform Comment
+    - name: Publish Comment - Split into Chunks
       uses: actions/github-script@v7
       with:
         script: |
@@ -89,6 +89,55 @@ jobs:
           } else {
             const body = `
           <b>A regular comment (less than 65536 characters long)</b>
+          \`\`\`hcl
+          ${plan}
+          \`\`\`
+          `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })
+          }
+    - name: Publish Comment - Single Comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const MAX_GITHUB_COMMENT_LENGTH = 65536;
+          let plan;
+
+          try {
+            const fs = require('fs');
+            plan = fs.readFileSync("comment.txt", { encoding: 'utf8', flag: 'r' });
+          } catch (err) {
+            console.log(err);
+            return;
+          }
+
+          if (plan.length > MAX_GITHUB_COMMENT_LENGTH) {
+            const issue_number = context.issue.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflowUrl = `https://github.com/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const body = `
+          <b>Command output</b>
+          \`command\` output is too long to be published in the GitHub comment. Please view the full output in the workflow run.
+          🔗 **[View Workflow Run](${workflowUrl})**
+          `;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })
+
+          } else {
+            const body = `
+          <b>Command output</b>
           \`\`\`hcl
           ${plan}
           \`\`\`
