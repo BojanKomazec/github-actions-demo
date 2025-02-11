@@ -15,6 +15,9 @@ jobs:
     name: Comment on PR
 
     # update GITHUB_TOKEN permissions
+    # see: https://docs.github.com/en/rest/issues/comments?apiVersion=2022-11-28#create-an-issue-comment
+    # Without this permission, the action will fail with http error 403
+    #   RequestError [HttpError]: Resource not accessible by integration
     permissions:
       pull-requests: write
 
